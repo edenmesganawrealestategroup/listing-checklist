@@ -89,6 +89,8 @@
   .task-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border-soft); transition: background 0.1s; }
   .task-row:last-child { border-bottom: none; }
   .task-row:hover { background: var(--bg); }
+  .add-task-btn { padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; text-align: center; border-top: 1px dashed var(--border-soft); transition: all 0.1s; }
+  .add-task-btn:hover { background: var(--bg); color: var(--text); }
   .check-btn { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; transition: all 0.15s; font-size: 11px; }
   .check-btn.done { background: var(--green); border-color: var(--green); color: #fff; }
   .check-btn.progress { background: var(--amber); border-color: var(--amber); color: #fff; }
@@ -123,7 +125,7 @@
   /* Modal */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
   .modal { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; width: 100%; max-width: 460px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
-  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
   .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
   .form-group { margin-bottom: 14px; }
@@ -246,11 +248,14 @@
   </div>
 </div>
 
-<!-- EDIT TASK MODAL -->
+<!-- EDIT / ADD TASK MODAL -->
 <div class="modal-overlay" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditTask()">
   <div class="modal">
-    <div class="modal-title">Edit task</div>
-    <div class="modal-sub" id="edit-task-text"></div>
+    <div class="modal-title" id="edit-modal-title">Edit task</div>
+    <div class="form-group">
+      <label class="form-label">Task Description</label>
+      <textarea class="form-input" id="edit-text" placeholder="What needs to be done?" style="min-height: 50px;"></textarea>
+    </div>
     <div class="form-row">
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label">Assigned to</label>
@@ -270,8 +275,9 @@
       <textarea class="form-input" id="edit-notes" placeholder="Add notes or context..."></textarea>
     </div>
     <div class="modal-actions">
+      <button class="btn-cancel" id="btn-delete-task" style="color: var(--red); border-color: var(--red-light); margin-right: auto;" onclick="deleteTask()">Delete</button>
       <button class="btn-cancel" onclick="closeEditTask()">Cancel</button>
-      <button class="btn-primary" onclick="saveEditTask()">Save changes</button>
+      <button class="btn-primary" onclick="saveEditTask()">Save task</button>
     </div>
   </div>
 </div>
@@ -376,9 +382,11 @@ window.deleteListing = deleteListing;
 window.cycleStatus = cycleStatus;
 window.toggleAssignDropdown = toggleAssignDropdown;
 window.assignTask = assignTask;
+window.openAddTask = openAddTask;
 window.openEditTask = openEditTask;
 window.closeEditTask = closeEditTask;
 window.saveEditTask = saveEditTask;
+window.deleteTask = deleteTask;
 window.togglePhase = togglePhase;
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -510,6 +518,7 @@ function buildListingView(l) {
       </div>
       <div class="task-list">
         ${ptasks.map(t=>buildTaskRow(l.id, t)).join('')}
+        <div class="add-task-btn" onclick="openAddTask('${l.id}', '${ph.id}')">+ Add new task</div>
       </div>
     </div>`;
   }).join('');
@@ -809,31 +818,82 @@ async function assignTask(listingId, taskId, member) {
   await syncTasksToDb(listingId);
 }
 
+function openAddTask(listingId, phaseId) {
+  editingTask = { listingId, phaseId, isNew: true };
+  el('edit-modal-title').textContent = 'Add new task';
+  el('edit-text').value = '';
+  el('edit-assignee').value = 'Team';
+  el('edit-status').value = 'To Do';
+  el('edit-notes').value = '';
+  el('btn-delete-task').style.display = 'none'; // Cannot delete an unsaved task
+  el('edit-modal').style.display = 'flex';
+}
+
 function openEditTask(listingId, taskId) {
   const l = state.listings.find(x=>x.id===listingId);
   if (!l) return;
   const t = l.tasks.find(x=>x.id===taskId);
   if (!t) return;
-  editingTask = {listingId, taskId};
-  el('edit-task-text').textContent = t.text;
+  editingTask = { listingId, taskId, isNew: false };
+  el('edit-modal-title').textContent = 'Edit task';
+  el('edit-text').value = t.text;
   el('edit-assignee').value = t.assignee;
   el('edit-status').value   = t.status;
   el('edit-notes').value    = t.notes||'';
+  el('btn-delete-task').style.display = 'block'; // Show delete button for existing task
   el('edit-modal').style.display='flex';
 }
+
 function closeEditTask() { el('edit-modal').style.display='none'; editingTask=null; }
 
 async function saveEditTask() {
   if (!editingTask) return;
+  const {listingId, taskId, phaseId, isNew} = editingTask;
+  const l = state.listings.find(x=>x.id===listingId);
+  if (!l) return;
+  
+  const text = el('edit-text').value.trim();
+  if (!text) return; // Disallow empty task text
+  
+  if (isNew) {
+    const newTask = {
+      id: 't_custom_' + uid(),
+      phaseId: phaseId,
+      text: text,
+      assignee: el('edit-assignee').value,
+      status: el('edit-status').value,
+      notes: el('edit-notes').value.trim()
+    };
+    if (!l.tasks) l.tasks = [];
+    l.tasks.push(newTask);
+  } else {
+    const t = l.tasks.find(x=>x.id===taskId);
+    if (!t) return;
+    t.text = text;
+    t.assignee = el('edit-assignee').value;
+    t.status   = el('edit-status').value;
+    t.notes    = el('edit-notes').value.trim();
+  }
+  
+  closeEditTask();
+  
+  // Optimistic UI render
+  renderSidebar();
+  renderContent();
+
+  // Sync to database
+  await syncTasksToDb(listingId);
+}
+
+async function deleteTask() {
+  if (!editingTask || editingTask.isNew) return;
+  if (!confirm('Are you sure you want to delete this task?')) return;
+  
   const {listingId, taskId} = editingTask;
   const l = state.listings.find(x=>x.id===listingId);
   if (!l) return;
-  const t = l.tasks.find(x=>x.id===taskId);
-  if (!t) return;
   
-  t.assignee = el('edit-assignee').value;
-  t.status   = el('edit-status').value;
-  t.notes    = el('edit-notes').value.trim();
+  l.tasks = l.tasks.filter(t => t.id !== taskId);
   
   closeEditTask();
   
