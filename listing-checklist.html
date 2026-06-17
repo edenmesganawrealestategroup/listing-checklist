@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Listing Checklist — Eden's Team</title>
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --border: #e2e0da;
+    --border-soft: #ece9e2;
+    --text: #1c1b18;
+    --muted: #7a7870;
+    --accent: #1a5276;
+    --accent-light: #e8f0f8;
+    --green: #1e6b3a;
+    --green-light: #e6f4ec;
+    --amber: #7a4e00;
+    --amber-light: #fdf3e0;
+    --red: #8b1f1f;
+    --red-light: #fce8e8;
+    --gray-light: #f0eeea;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  
+  /* Layout */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .main { flex: 1; overflow-y: auto; }
+  
+  /* Sidebar */
+  .sidebar-header { padding: 20px 16px 12px; border-bottom: 1px solid var(--border-soft); }
+  .sidebar-brand { font-size: 15px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+  .sidebar-brand svg { flex-shrink: 0; }
+  .sidebar-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .sidebar-section { padding: 12px 8px 4px; }
+  .sidebar-label { font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; padding: 0 8px 6px; }
+  .sidebar-btn { width: 100%; text-align: left; padding: 8px 10px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; transition: all 0.12s; }
+  .sidebar-btn:hover { background: var(--bg); color: var(--text); }
+  .sidebar-btn.active { background: var(--accent-light); color: var(--accent); font-weight: 500; }
+  .sidebar-btn .pill { margin-left: auto; font-size: 10px; background: var(--border); color: var(--muted); padding: 1px 6px; border-radius: 10px; }
+  .sidebar-btn.active .pill { background: var(--accent); color: #fff; }
+  .new-btn { margin: 12px; padding: 9px 12px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; transition: opacity 0.12s; }
+  .new-btn:hover { opacity: 0.9; }
+  .sidebar-footer { margin-top: auto; padding: 8px; border-top: 1px solid var(--border-soft); }
+  .footer-btn { width: 100%; text-align: left; padding: 8px 10px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; transition: all 0.12s; }
+  .footer-btn:hover { background: var(--bg); color: var(--text); }
+  .footer-btn.active { background: var(--accent-light); color: var(--accent); font-weight: 500; }
+
+  /* Content area */
+  .content { max-width: 860px; margin: 0 auto; padding: 28px 32px; }
+  
+  /* Page header */
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; gap: 16px; }
+  .page-title { font-size: 20px; font-weight: 600; color: var(--text); }
+  .page-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .delete-btn { padding: 7px 10px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.12s; }
+  .delete-btn:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
+
+  /* Progress bar */
+  .progress-section { margin-bottom: 24px; }
+  .progress-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .stat-num { font-size: 22px; font-weight: 600; line-height: 1; }
+  .stat-num.green { color: var(--green); }
+  .stat-num.amber { color: var(--amber); }
+  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .progress-bar-wrap { background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #1a5276, #1e6b3a); border-radius: 4px; transition: width 0.4s ease; }
+
+  /* Phase */
+  .phase-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+  .phase-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--border-soft); cursor: pointer; user-select: none; }
+  .phase-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .phase-title { font-size: 13px; font-weight: 600; flex: 1; }
+  .phase-count { font-size: 11px; color: var(--muted); }
+  .phase-mini-bar { width: 80px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .phase-mini-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .phase-toggle { color: var(--muted); font-size: 18px; transition: transform 0.2s; }
+  .phase-toggle.open { transform: rotate(180deg); }
+
+  /* Tasks */
+  .task-list { padding: 4px 0; }
+  .task-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border-soft); transition: background 0.1s; }
+  .task-row:last-child { border-bottom: none; }
+  .task-row:hover { background: var(--bg); }
+  .check-btn { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; transition: all 0.15s; font-size: 11px; }
+  .check-btn.done { background: var(--green); border-color: var(--green); color: #fff; }
+  .check-btn.progress { background: var(--amber); border-color: var(--amber); color: #fff; }
+  .check-btn.na { background: var(--muted); border-color: var(--muted); color: #fff; }
+  .task-body { flex: 1; min-width: 0; }
+  .task-text { font-size: 13px; line-height: 1.5; }
+  .task-text.done { text-decoration: line-through; color: var(--muted); }
+  .task-note { font-size: 11px; color: var(--muted); margin-top: 3px; font-style: italic; }
+  .task-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; white-space: nowrap; cursor: pointer; border: none; transition: opacity 0.12s; }
+  .badge:hover { opacity: 0.8; }
+  .b-eden { background: #dce8f5; color: #1a4f7a; }
+  .b-jv { background: #e8e6fa; color: #4a3fa0; }
+  .b-hector { background: #fae6ef; color: #8a2545; }
+  .b-clarisse { background: #d8f0e8; color: #0d6045; }
+  .b-team { background: #fce8e8; color: #8b1f1f; }
+  .b-todo { background: var(--gray-light); color: var(--muted); }
+  .b-progress { background: var(--amber-light); color: var(--amber); }
+  .b-done { background: var(--green-light); color: var(--green); }
+  .b-na { background: var(--gray-light); color: var(--muted); }
+  .icon-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 3px 5px; border-radius: 4px; font-size: 16px; line-height: 1; transition: all 0.12s; }
+  .icon-btn:hover { background: var(--border); color: var(--text); }
+
+  /* Dropdown */
+  .dropdown-wrap { position: relative; }
+  .dropdown-menu { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow); z-index: 50; min-width: 120px; padding: 4px; }
+  .dropdown-item { padding: 7px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap; transition: background 0.1s; }
+  .dropdown-item:hover { background: var(--bg); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+  .modal { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; width: 100%; max-width: 460px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; display: block; margin-bottom: 5px; }
+  .form-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.12s; }
+  .form-input:focus { border-color: var(--accent); background: var(--surface); }
+  textarea.form-input { resize: vertical; min-height: 70px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .btn-cancel { padding: 8px 16px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.12s; }
+  .btn-cancel:hover { background: var(--bg); }
+  .btn-primary { padding: 8px 18px; border: none; background: var(--accent); color: #fff; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity 0.12s; }
+  .btn-primary:hover { opacity: 0.88; }
+
+  /* Team view */
+  .team-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .team-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .team-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+  .av-eden { background: #dce8f5; color: #1a4f7a; }
+  .av-jv { background: #e8e6fa; color: #4a3fa0; }
+  .av-hector { background: #fae6ef; color: #8a2545; }
+  .av-clarisse { background: #d8f0e8; color: #0d6045; }
+  .team-name { font-size: 14px; font-weight: 600; }
+  .team-role { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .team-stats { margin-left: auto; display: flex; gap: 6px; }
+  .mini-pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; }
+  .mp-pending { background: var(--amber-light); color: var(--amber); }
+  .mp-done { background: var(--green-light); color: var(--green); }
+  .team-task { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--border-soft); }
+  .team-task:last-child { border-bottom: none; }
+  .team-task-addr { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+  /* Dashboard */
+  .dash-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+  .dash-listing { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
+  .dash-listing-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .dash-listing-title { font-size: 13px; font-weight: 500; flex: 1; }
+  .dash-listing-date { font-size: 11px; color: var(--muted); }
+  .phase-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .phase-pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--gray-light); color: var(--muted); }
+  .phase-pill.full { background: var(--green-light); color: var(--green); }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 64px 32px; }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .empty-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .sidebar { width: 200px; }
+    .content { padding: 20px 16px; }
+    .progress-stats { grid-template-columns: repeat(2, 1fr); }
+    .team-grid { grid-template-columns: 1fr; }
+    .dash-cards { grid-template-columns: repeat(2, 1fr); }
+    .form-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Eden's Team
+      </div>
+      <div class="sidebar-sub">Listing Checklist System</div>
+    </div>
+    <button class="new-btn" onclick="openNewListing()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New listing
+    </button>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Listings</div>
+      <div id="listing-nav"></div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="footer-btn" id="btn-team" onclick="showView('team')">
+        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Team view
+      </button>
+      <button class="footer-btn" id="btn-dash" onclick="showView('dashboard')">
+        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" id="main-area">
+    <div class="content" id="content-area">
+      <div class="empty">
+        <div class="empty-icon">🏠</div>
+        <div class="empty-title">Loading Listings...</div>
+        <div class="empty-sub">Connecting to team database.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- NEW LISTING MODAL -->
+<div class="modal-overlay" id="new-modal" style="display:none" onclick="if(event.target===this)closeNewListing()">
+  <div class="modal">
+    <div class="modal-title">New listing</div>
+    <div class="modal-sub">Enter the property address. All 39 checklist tasks will be loaded automatically across 5 phases.</div>
+    <div class="form-group">
+      <label class="form-label">Property address</label>
+      <input class="form-input" id="new-address" placeholder="e.g. 123 Main St, Toronto ON" onkeydown="if(event.key==='Enter')createListing()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeNewListing()">Cancel</button>
+      <button class="btn-primary" onclick="createListing()">Create listing</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT TASK MODAL -->
+<div class="modal-overlay" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditTask()">
+  <div class="modal">
+    <div class="modal-title">Edit task</div>
+    <div class="modal-sub" id="edit-task-text"></div>
+    <div class="form-row">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Assigned to</label>
+        <select class="form-input" id="edit-assignee">
+          <option>Eden</option><option>JV</option><option>Hector</option><option>Clarisse</option><option>Team</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Status</label>
+        <select class="form-input" id="edit-status">
+          <option>To Do</option><option>In Progress</option><option>Completed</option><option>N/A</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <textarea class="form-input" id="edit-notes" placeholder="Add notes or context..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditTask()">Cancel</button>
+      <button class="btn-primary" onclick="saveEditTask()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ensure you use type="module" to enable Firebase imports -->
+<script type="module">
+// ── FIREBASE INTEGRATION ────────────────────────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBvNn626SLrRXaND7jcrbYRVsb0u6X6Fl8",
+  authDomain: "listing-checklist-3ae7b.firebaseapp.com",
+  projectId: "listing-checklist-3ae7b",
+  storageBucket: "listing-checklist-3ae7b.firebasestorage.app",
+  messagingSenderId: "324913145088",
+  appId: "1:324913145088:web:d6a693b0632464b9c13fe5"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ── DATA ────────────────────────────────────────────────────────────────────
+const PHASES = [
+  { id:'setup',    label:'Pre-listing setup',  color:'#1a5276', bg:'#e8f0f8', tasks:[
+    {id:'t1',  text:'Receive seller contact info & update in Mojo', assignee:'Team', notes:'Ask for IDs before launching — needed for Fintrac'},
+    {id:'t2',  text:'Receive property info for MLS and Repree listing forms', assignee:'Team', notes:''},
+    {id:'t3',  text:'Remind Eden about missing info — utility bills, tax, upgrades/features', assignee:'Team', notes:''},
+    {id:'t4',  text:'Confirm rental and owned items (AC, hot water tank, furnace)', assignee:'Team', notes:''},
+    {id:'t5',  text:'Compare lot size on listing vs land registry; fill in map/community info', assignee:'Team', notes:''},
+    {id:'t6',  text:'Create Google Drive folder for the property', assignee:'Team', notes:''},
+    {id:'t7',  text:'Receive listing/rental documents and save to Google Drive', assignee:'Team', notes:''},
+    {id:'t8',  text:'Add client emails to Repree', assignee:'Team', notes:''},
+    {id:'t9',  text:'Prepare in Repree — Listing Agreement', assignee:'Team', notes:''},
+    {id:'t10', text:'Prepare in Repree — Freehold/Condo MLS Data Form', assignee:'Team', notes:''},
+    {id:'t11', text:'Prepare in Repree — Working with a Realtor', assignee:'Team', notes:''},
+    {id:'t12', text:'Prepare in Repree — Fintrac ID', assignee:'Team', notes:'Ask for IDs before launching'},
+    {id:'t13', text:'Prepare in Repree — Schedules, RECO Info Guide', assignee:'Team', notes:''},
+    {id:'t14', text:'Order Coming Soon sign installation', assignee:'Team', notes:'thesigninstallers.com'},
+    {id:'t15', text:'Pick up keys and install lockbox', assignee:'Eden', notes:'Combination: 6920'},
+    {id:'t16', text:'Input clients & listing info into Mojo and database', assignee:'Team', notes:''},
+    {id:'t17', text:'Add launch and expiry dates to calendar', assignee:'Team', notes:''},
+    {id:'t18', text:'Order photos/videos', assignee:'Eden', notes:'winsold.com/package — consider Shante next time'},
+  ]},
+  { id:'prelaunch', label:'Pre-launch', color:'#7a4e00', bg:'#fdf3e0', tasks:[
+    {id:'t19', text:'Receive & save photos/videos to Google Drive; remove duplicates', assignee:'Team', notes:''},
+    {id:'t20', text:'Check website — confirm property appears in featured properties', assignee:'Team', notes:''},
+    {id:'t21', text:'Verify all attachments on listing (schedule B, COVID, survey, floor plan, lease)', assignee:'Team', notes:''},
+    {id:'t22', text:'Choose top 10 photos for FB/Kijiji; save in separate folder', assignee:'Team', notes:''},
+    {id:'t23', text:'Post first ad to Kijiji', assignee:'Team', notes:''},
+    {id:'t24', text:'Continue posting to Kijiji (daily)', assignee:'Team', notes:''},
+    {id:'t25', text:'Save signed listing docs to Google Drive', assignee:'Team', notes:''},
+    {id:'t26', text:'Make Canva ad — Coming Soon & New Listing images', assignee:'Team', notes:''},
+    {id:'t27', text:'Post on social media (Instagram, FB, YouTube, LinkedIn)', assignee:'Team', notes:''},
+  ]},
+  { id:'live', label:'Listing live', color:'#1e6b3a', bg:'#e6f4ec', tasks:[
+    {id:'t28', text:'Flag open houses on MLS', assignee:'Team', notes:''},
+    {id:'t29', text:'Continue posting to Kijiji (Tue, Wed, Thu)', assignee:'Team', notes:''},
+    {id:'t30', text:'Email sellers that listing is now live on MLS (attach MLS page)', assignee:'Eden', notes:''},
+  ]},
+  { id:'firm', label:'Listing firm', color:'#4a3fa0', bg:'#e8e6fa', tasks:[
+    {id:'t31', text:'Make Canva Just Sold image', assignee:'Team', notes:''},
+    {id:'t32', text:'Post Just Sold on FB/Instagram', assignee:'Eden', notes:''},
+    {id:'t33', text:'Add closing date reminder to calendar; send invite to Eden', assignee:'Team', notes:''},
+  ]},
+  { id:'closed', label:'Listing closed', color:'#0d6045', bg:'#d8f0e8', tasks:[
+    {id:'t34', text:'Remove lockbox and sign after close date', assignee:'Eden', notes:''},
+    {id:'t35', text:'Add payment check reminder (1 week after close)', assignee:'Team', notes:''},
+    {id:'t36', text:'Add social media pictures used to Google Page', assignee:'Team', notes:''},
+    {id:'t37', text:'Update Real Estate Tracker / Production Report', assignee:'Team', notes:''},
+    {id:'t38', text:'Ask for review — send Google Review template email to sellers', assignee:'Team', notes:''},
+    {id:'t39', text:'Send moving checklist to sellers', assignee:'Team', notes:''},
+  ]},
+];
+
+const STATUSES = ['To Do','In Progress','Completed','N/A'];
+const STATUS_CYCLE = {[STATUSES[0]]:STATUSES[1],[STATUSES[1]]:STATUSES[2],[STATUSES[2]]:STATUSES[3],[STATUSES[3]]:STATUSES[0]};
+
+const MEMBER_CLASS = {Eden:'b-eden',JV:'b-jv',Hector:'b-hector',Clarisse:'b-clarisse',Team:'b-team'};
+const STATUS_CLASS  = {'To Do':'b-todo','In Progress':'b-progress','Completed':'b-done','N/A':'b-na'};
+const CHECK_CLASS   = {'To Do':'','In Progress':'progress','Completed':'done','N/A':'na'};
+const CHECK_ICON    = {'To Do':'','In Progress':'~','Completed':'✓','N/A':'—'};
+
+let state = { listings:[], activeId:null, view:'empty' };
+let editingTask = null; 
+let openPhases = {}; 
+let openDropdown = null;
+
+// Ensure all default phases are open
+PHASES.forEach(p => { if (openPhases[p.id]===undefined) openPhases[p.id]=true; });
+
+// ── WINDOW BINDINGS ──────────────────────────────────────────────────────────
+// Because we are using type="module", functions must be exposed to window 
+// to be usable by inline HTML onclick attributes
+window.showView = showView;
+window.openNewListing = openNewListing;
+window.closeNewListing = closeNewListing;
+window.createListing = createListing;
+window.deleteListing = deleteListing;
+window.cycleStatus = cycleStatus;
+window.toggleAssignDropdown = toggleAssignDropdown;
+window.assignTask = assignTask;
+window.openEditTask = openEditTask;
+window.closeEditTask = closeEditTask;
+window.saveEditTask = saveEditTask;
+window.togglePhase = togglePhase;
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function uid() { return '_'+Math.random().toString(36).slice(2,9); }
+function pct(tasks) {
+  if (!tasks?.length) return 0;
+  return Math.round(tasks.filter(t=>t.status==='Completed'||t.status==='N/A').length / tasks.length * 100);
+}
+function el(id) { return document.getElementById(id); }
+
+function defaultTasks() {
+  return PHASES.flatMap(ph => ph.tasks.map(t => ({
+    id: t.id+'_'+uid(), phaseId: ph.id, text: t.text,
+    assignee: t.assignee, status:'To Do', notes: t.notes
+  })));
+}
+
+// ── REAL-TIME DATABASE LISTENER ───────────────────────────────────────────────
+function initFirebaseListener() {
+  const listingsRef = collection(db, "listings");
+  
+  onSnapshot(listingsRef, (snapshot) => {
+    const loadedListings = [];
+    snapshot.forEach((doc) => {
+      loadedListings.push({ id: doc.id, ...doc.data() });
+    });
+    
+    // Default to natural sort/order. You can sort by createdAt here if needed.
+    state.listings = loadedListings;
+
+    // Correct view states based on loaded data
+    if (!state.activeId && loadedListings.length > 0) {
+      state.activeId = loadedListings[0].id;
+      state.view = 'listing';
+    } else if (state.activeId && !loadedListings.find(l => l.id === state.activeId)) {
+      state.activeId = loadedListings.length > 0 ? loadedListings[0].id : null;
+      state.view = state.activeId ? 'listing' : 'empty';
+    } else if (loadedListings.length === 0) {
+      state.activeId = null;
+      state.view = 'empty';
+    }
+
+    renderSidebar();
+    renderContent();
+  }, (error) => {
+    console.error("Firestore listener error:", error);
+  });
+}
+
+// ── AUTHENTICATION ────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    // User is logged in automatically, initiate sync
+    initFirebaseListener();
+  } else {
+    // Attempt anonymous login if not logged in
+    signInAnonymously(auth).catch(err => console.error("Auth error:", err));
+  }
+});
+
+// ── VIEWS ────────────────────────────────────────────────────────────────────
+function showView(v, listingId) {
+  state.view = v;
+  if (listingId) state.activeId = listingId;
+  renderSidebar();
+  renderContent();
+}
+
+function renderSidebar() {
+  const nav = el('listing-nav');
+  nav.innerHTML = state.listings.map(l => {
+    const p = pct(l.tasks);
+    const active = state.view==='listing' && state.activeId===l.id;
+    return `<button class="sidebar-btn${active?' active':''}" onclick="showView('listing','${l.id}')">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left">${l.address}</span>
+      <span class="pill">${p}%</span>
+    </button>`;
+  }).join('');
+  el('btn-team').className = 'footer-btn'+(state.view==='team'?' active':'');
+  el('btn-dash').className = 'footer-btn'+(state.view==='dashboard'?' active':'');
+}
+
+function renderContent() {
+  const area = el('content-area');
+  if (state.view==='listing') {
+    const l = state.listings.find(x=>x.id===state.activeId);
+    if (l) area.innerHTML = buildListingView(l);
+    else area.innerHTML = buildEmpty();
+  } else if (state.view==='team') {
+    area.innerHTML = buildTeamView();
+  } else if (state.view==='dashboard') {
+    area.innerHTML = buildDashboard();
+  } else {
+    area.innerHTML = buildEmpty();
+  }
+  // re-open phases that were open
+  document.querySelectorAll('.phase-block').forEach(b => {
+    const pid = b.dataset.phase;
+    const body = b.querySelector('.task-list');
+    const toggle = b.querySelector('.phase-toggle');
+    if (openPhases[pid]===false) { if(body) body.style.display='none'; if(toggle) toggle.textContent='▼'; }
+    else { if(body) body.style.display=''; if(toggle) toggle.textContent='▲'; toggle&&toggle.classList.add('open'); }
+  });
+}
+
+// ── LISTING VIEW ─────────────────────────────────────────────────────────────
+function buildListingView(l) {
+  const tasks = l.tasks || [];
+  const done = tasks.filter(t=>t.status==='Completed').length;
+  const prog = tasks.filter(t=>t.status==='In Progress').length;
+  const na   = tasks.filter(t=>t.status==='N/A').length;
+  const p    = pct(tasks);
+
+  const phaseBlocks = PHASES.map(ph => {
+    const ptasks = tasks.filter(t=>t.phaseId===ph.id);
+    const pdone  = ptasks.filter(t=>t.status==='Completed'||t.status==='N/A').length;
+    const pp     = ptasks.length ? Math.round(pdone/ptasks.length*100) : 0;
+    return `
+    <div class="phase-block" data-phase="${ph.id}">
+      <div class="phase-head" onclick="togglePhase('${ph.id}')">
+        <div class="phase-icon" style="background:${ph.bg};color:${ph.color}">
+          ${phaseEmoji(ph.id)}
+        </div>
+        <div class="phase-title" style="color:${ph.color}">${ph.label}</div>
+        <div class="phase-mini-bar"><div class="phase-mini-fill" style="width:${pp}%;background:${ph.color}"></div></div>
+        <div class="phase-count">${pdone}/${ptasks.length}</div>
+        <span class="phase-toggle open" style="margin-left:8px">▲</span>
+      </div>
+      <div class="task-list">
+        ${ptasks.map(t=>buildTaskRow(l.id, t)).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="page-header">
+    <div>
+      <div class="page-title">${l.address}</div>
+      <div class="page-meta">Created ${l.createdAt} · ${tasks.length} tasks total</div>
+    </div>
+    <button class="delete-btn" onclick="deleteListing('${l.id}')">🗑 Delete</button>
+  </div>
+  <div class="progress-section">
+    <div class="progress-stats">
+      <div class="stat-card"><div class="stat-num green">${done}</div><div class="stat-lbl">Completed</div></div>
+      <div class="stat-card"><div class="stat-num amber">${prog}</div><div class="stat-lbl">In progress</div></div>
+      <div class="stat-card"><div class="stat-num">${na}</div><div class="stat-lbl">N/A</div></div>
+      <div class="stat-card"><div class="stat-num">${p}%</div><div class="stat-lbl">Overall</div></div>
+    </div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${p}%"></div></div>
+  </div>
+  ${phaseBlocks}`;
+}
+
+function phaseEmoji(id) {
+  const map = {setup:'📋',prelaunch:'🚀',live:'📡',firm:'🤝',closed:'✅'};
+  return `<span style="font-size:13px">${map[id]||'•'}</span>`;
+}
+
+function buildTaskRow(listingId, t) {
+  const cc = CHECK_CLASS[t.status];
+  const ci = CHECK_ICON[t.status];
+  const mb = MEMBER_CLASS[t.assignee]||'b-team';
+  const isDone = t.status==='Completed';
+  const note = t.notes ? `<div class="task-note">${t.notes}</div>` : '';
+  return `
+  <div class="task-row" id="row_${t.id}">
+    <button class="check-btn ${cc}" onclick="cycleStatus('${listingId}','${t.id}')" title="Click to change status">${ci}</button>
+    <div class="task-body">
+      <div class="task-text${isDone?' done':''}">${t.text}</div>
+      ${note}
+    </div>
+    <div class="task-actions">
+      <div class="dropdown-wrap">
+        <button class="badge ${mb}" onclick="toggleAssignDropdown(event,'${listingId}','${t.id}')">${t.assignee} ▾</button>
+        <div class="dropdown-menu" id="dd_${t.id}" style="display:none">
+          ${['Eden','JV','Hector','Clarisse','Team'].map(m=>`<div class="dropdown-item" onclick="assignTask('${listingId}','${t.id}','${m}')">${m}</div>`).join('')}
+        </div>
+      </div>
+      <button class="icon-btn" onclick="openEditTask('${listingId}','${t.id}')" title="Edit task">✎</button>
+    </div>
+  </div>`;
+}
+
+// ── TEAM VIEW ─────────────────────────────────────────────────────────────────
+function buildTeamView() {
+  const members = ['Eden','JV','Hector','Clarisse'];
+  const cards = members.map(m => {
+    const rows = [];
+    state.listings.forEach(l => {
+      if(l.tasks) {
+        l.tasks.forEach(t => {
+          if (t.assignee===m||t.assignee==='Team') rows.push({...t,address:l.address});
+        });
+      }
+    });
+    const pending = rows.filter(t=>t.status==='To Do'||t.status==='In Progress');
+    const done    = rows.filter(t=>t.status==='Completed');
+    const avClass = `av-${m.toLowerCase()}`;
+    const initials = m==='JV'?'JV':m.slice(0,2).toUpperCase();
+    const role = m==='Eden'?'Main agent':'Assistant';
+    const items = pending.slice(0,6).map(t=>`
+      <div class="team-task">
+        <span class="badge ${STATUS_CLASS[t.status]}" style="flex-shrink:0;margin-top:1px">${t.status}</span>
+        <div><div style="font-size:12px">${t.text}</div><div class="team-task-addr">${t.address}</div></div>
+      </div>`).join('');
+    const more = pending.length>6 ? `<div style="font-size:11px;color:var(--muted);padding:6px 0">+${pending.length-6} more tasks</div>` : '';
+    const allClear = pending.length===0 ? `<div style="font-size:12px;color:var(--green);padding:6px 0">✓ All caught up!</div>` : '';
+    return `
+    <div class="team-card">
+      <div class="team-card-head">
+        <div class="avatar ${avClass}">${initials}</div>
+        <div><div class="team-name">${m}</div><div class="team-role">${role}</div></div>
+        <div class="team-stats">
+          <span class="mini-pill mp-pending">${pending.length} pending</span>
+          <span class="mini-pill mp-done">${done.length} done</span>
+        </div>
+      </div>
+      ${items}${more}${allClear}
+    </div>`;
+  }).join('');
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Team accountability</div><div class="page-meta">Pending tasks per team member across all listings</div></div>
+  </div>
+  <div class="team-grid">${cards}</div>`;
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function buildDashboard() {
+  const listings = state.listings;
+  const allTasks = listings.flatMap(l=>l.tasks || []);
+  const totalDone = allTasks.filter(t=>t.status==='Completed').length;
+  const totalPending = allTasks.filter(t=>t.status==='To Do').length;
+  const avgPct = listings.length ? Math.round(listings.reduce((a,l)=>a+pct(l.tasks),0)/listings.length) : 0;
+
+  const rows = listings.map(l => {
+    const p = pct(l.tasks);
+    const tasks = l.tasks || [];
+    const done = tasks.filter(t=>t.status==='Completed').length;
+    const prog = tasks.filter(t=>t.status==='In Progress').length;
+    const pills = PHASES.map(ph=>{
+      const ptasks = tasks.filter(t=>t.phaseId===ph.id);
+      const pp = pct(ptasks);
+      return `<span class="phase-pill${pp===100?' full':''}">${ph.label.split(' ').pop()} ${pp}%</span>`;
+    }).join('');
+    return `
+    <div class="dash-listing" onclick="showView('listing','${l.id}')" style="cursor:pointer">
+      <div class="dash-listing-head">
+        <div class="dash-listing-title">${l.address}</div>
+        <span class="mini-pill mp-done">${done} done</span>
+        <span class="mini-pill mp-pending">${prog} in prog</span>
+        <strong style="font-size:14px;min-width:36px;text-align:right">${p}%</strong>
+      </div>
+      <div class="progress-bar-wrap" style="height:5px"><div class="progress-bar-fill" style="width:${p}%"></div></div>
+      <div class="phase-pills">${pills}</div>
+    </div>`;
+  }).join('');
+
+  const empty = listings.length===0 ? `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No listings yet</div><div class="empty-sub">Create your first listing to see the dashboard.</div><button class="btn-primary" onclick="openNewListing()">+ New listing</button></div>` : '';
+
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Dashboard</div><div class="page-meta">Overview across all active listings</div></div>
+  </div>
+  <div class="dash-cards">
+    <div class="stat-card"><div class="stat-num">${listings.length}</div><div class="stat-lbl">Active listings</div></div>
+    <div class="stat-card"><div class="stat-num green">${totalDone}</div><div class="stat-lbl">Tasks completed</div></div>
+    <div class="stat-card"><div class="stat-num amber">${totalPending}</div><div class="stat-lbl">Tasks pending</div></div>
+    <div class="stat-card"><div class="stat-num">${avgPct}%</div><div class="stat-lbl">Avg progress</div></div>
+  </div>
+  ${rows}${empty}`;
+}
+
+function buildEmpty() {
+  return `<div class="empty">
+    <div class="empty-icon">🏠</div>
+    <div class="empty-title">No listing selected</div>
+    <div class="empty-sub">Create your first listing to get started.</div>
+    <button class="btn-primary" onclick="openNewListing()">+ New listing</button>
+  </div>`;
+}
+
+// ── ACTIONS & DB WRITES ───────────────────────────────────────────────────────
+function openNewListing() { el('new-modal').style.display='flex'; el('new-address').value=''; setTimeout(()=>el('new-address').focus(),50); }
+function closeNewListing() { el('new-modal').style.display='none'; }
+
+async function createListing() {
+  const addr = el('new-address').value.trim();
+  if (!addr) return;
+  const newId = uid();
+  const l = { id: newId, address: addr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: defaultTasks() };
+  
+  closeNewListing();
+  
+  // Optimistic UI Update
+  state.listings.push(l);
+  state.activeId = newId;
+  state.view = 'listing';
+  renderSidebar();
+  renderContent();
+
+  // Firestore DB write
+  try {
+    await setDoc(doc(db, "listings", newId), l);
+  } catch (err) {
+    console.error("Failed to create listing in DB:", err);
+  }
+}
+
+async function deleteListing(id) {
+  if (!confirm('Delete this listing and all its tasks?')) return;
+  
+  // Optimistic Update
+  state.listings = state.listings.filter(l=>l.id!==id);
+  if (state.activeId===id) {
+    state.activeId = state.listings.length ? state.listings[state.listings.length-1].id : null;
+    state.view = state.activeId ? 'listing' : 'empty';
+  }
+  renderSidebar(); renderContent();
+
+  // DB update
+  try {
+    await deleteDoc(doc(db, "listings", id));
+  } catch (err) {
+    console.error("Failed to delete from DB:", err);
+  }
+}
+
+// Helper to push individual task modifications safely
+async function syncTasksToDb(listingId) {
+  const l = state.listings.find(x => x.id === listingId);
+  if (!l) return;
+  try {
+    await updateDoc(doc(db, "listings", listingId), { tasks: l.tasks });
+  } catch(e) {
+    console.error("Error updating tasks in DB:", e);
+  }
+}
+
+async function cycleStatus(listingId, taskId) {
+  const l = state.listings.find(x=>x.id===listingId);
+  if (!l) return;
+  const t = l.tasks.find(x=>x.id===taskId);
+  if (!t) return;
+  
+  t.status = STATUS_CYCLE[t.status]||'To Do';
+
+  // Fast DOM Patching without full re-render
+  const row = document.getElementById('row_'+taskId);
+  if (row) {
+    const btn = row.querySelector('.check-btn');
+    btn.className = 'check-btn '+CHECK_CLASS[t.status];
+    btn.textContent = CHECK_ICON[t.status];
+    const txt = row.querySelector('.task-text');
+    txt.className = 'task-text'+(t.status==='Completed'?' done':'');
+  }
+  
+  // Update sidebar pill & stats optimistically
+  const pills = document.querySelectorAll('#listing-nav .pill');
+  const btns  = document.querySelectorAll('#listing-nav .sidebar-btn');
+  btns.forEach((b,i) => { if(state.listings[i]&&state.listings[i].id===listingId) { pills[i].textContent=pct(l.tasks)+'%'; } });
+  renderProgressStats(listingId);
+
+  // Sync to database
+  await syncTasksToDb(listingId);
+}
+
+function renderProgressStats(listingId) {
+  const l = state.listings.find(x=>x.id===listingId);
+  if (!l) return;
+  const stats = document.querySelector('.progress-stats');
+  if (!stats) return;
+  const tasks = l.tasks;
+  const done = tasks.filter(t=>t.status==='Completed').length;
+  const prog = tasks.filter(t=>t.status==='In Progress').length;
+  const na   = tasks.filter(t=>t.status==='N/A').length;
+  const p    = pct(tasks);
+  const nums = stats.querySelectorAll('.stat-num');
+  if (nums[0]) nums[0].textContent = done;
+  if (nums[1]) nums[1].textContent = prog;
+  if (nums[2]) nums[2].textContent = na;
+  if (nums[3]) nums[3].textContent = p+'%';
+  const fill = document.querySelector('.progress-bar-fill');
+  if (fill) fill.style.width = p+'%';
+  
+  // phase counts
+  document.querySelectorAll('.phase-block').forEach(b => {
+    const pid = b.dataset.phase;
+    const ptasks = l.tasks.filter(t=>t.phaseId===pid);
+    const pdone  = ptasks.filter(t=>t.status==='Completed'||t.status==='N/A').length;
+    const pp     = ptasks.length ? Math.round(pdone/ptasks.length*100) : 0;
+    const pc = b.querySelector('.phase-count');
+    const pf = b.querySelector('.phase-mini-fill');
+    if (pc) pc.textContent = `${pdone}/${ptasks.length}`;
+    if (pf) pf.style.width = pp+'%';
+  });
+}
+
+function toggleAssignDropdown(e, listingId, taskId) {
+  e.stopPropagation();
+  const ddId = 'dd_'+taskId;
+  if (openDropdown && openDropdown!==ddId) el(openDropdown).style.display='none';
+  const dd = el(ddId);
+  dd.style.display = dd.style.display==='none' ? 'block' : 'none';
+  openDropdown = dd.style.display==='block' ? ddId : null;
+}
+document.addEventListener('click', ()=>{ if(openDropdown){ el(openDropdown).style.display='none'; openDropdown=null; }});
+
+async function assignTask(listingId, taskId, member) {
+  const l = state.listings.find(x=>x.id===listingId);
+  if (!l) return;
+  const t = l.tasks.find(x=>x.id===taskId);
+  if (!t) return;
+  t.assignee = member;
+  
+  // Fast DOM patch
+  const row = document.getElementById('row_'+taskId);
+  if (row) {
+    const badge = row.querySelector('.badge');
+    badge.className = 'badge '+MEMBER_CLASS[member];
+    badge.textContent = member+' ▾';
+  }
+  if (openDropdown) { el(openDropdown).style.display='none'; openDropdown=null; }
+
+  // Sync to database
+  await syncTasksToDb(listingId);
+}
+
+function openEditTask(listingId, taskId) {
+  const l = state.listings.find(x=>x.id===listingId);
+  if (!l) return;
+  const t = l.tasks.find(x=>x.id===taskId);
+  if (!t) return;
+  editingTask = {listingId, taskId};
+  el('edit-task-text').textContent = t.text;
+  el('edit-assignee').value = t.assignee;
+  el('edit-status').value   = t.status;
+  el('edit-notes').value    = t.notes||'';
+  el('edit-modal').style.display='flex';
+}
+function closeEditTask() { el('edit-modal').style.display='none'; editingTask=null; }
+
+async function saveEditTask() {
+  if (!editingTask) return;
+  const {listingId, taskId} = editingTask;
+  const l = state.listings.find(x=>x.id===listingId);
+  if (!l) return;
+  const t = l.tasks.find(x=>x.id===taskId);
+  if (!t) return;
+  
+  t.assignee = el('edit-assignee').value;
+  t.status   = el('edit-status').value;
+  t.notes    = el('edit-notes').value.trim();
+  
+  closeEditTask();
+  
+  // Optimistic UI render
+  renderSidebar();
+  renderContent();
+
+  // Sync to database
+  await syncTasksToDb(listingId);
+}
+
+function togglePhase(phaseId) {
+  const block = document.querySelector(`.phase-block[data-phase="${phaseId}"]`);
+  if (!block) return;
+  const body = block.querySelector('.task-list');
+  const toggle = block.querySelector('.phase-toggle');
+  const isOpen = body.style.display!=='none';
+  body.style.display = isOpen ? 'none' : '';
+  toggle.textContent = isOpen ? '▼' : '▲';
+  toggle.classList.toggle('open', !isOpen);
+  openPhases[phaseId] = !isOpen;
+}
+</script>
+</body>
+</html>
