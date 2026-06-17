@@ -223,9 +223,8 @@
     <div class="content" id="content-area">
       <div class="empty">
         <div class="empty-icon">🏠</div>
-        <div class="empty-title">No listing selected</div>
-        <div class="empty-sub">Create your first listing to get started.</div>
-        <button class="btn-primary" onclick="openNewListing()">+ New listing</button>
+        <div class="empty-title">Loading Listings...</div>
+        <div class="empty-sub">Connecting to team database.</div>
       </div>
     </div>
   </main>
@@ -277,7 +276,26 @@
   </div>
 </div>
 
-<script>
+<!-- Ensure you use type="module" to enable Firebase imports -->
+<script type="module">
+// ── FIREBASE INTEGRATION ────────────────────────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBvNn626SLrRXaND7jcrbYRVsb0u6X6Fl8",
+  authDomain: "listing-checklist-3ae7b.firebaseapp.com",
+  projectId: "listing-checklist-3ae7b",
+  storageBucket: "listing-checklist-3ae7b.firebasestorage.app",
+  messagingSenderId: "324913145088",
+  appId: "1:324913145088:web:d6a693b0632464b9c13fe5"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
 // ── DATA ────────────────────────────────────────────────────────────────────
 const PHASES = [
   { id:'setup',    label:'Pre-listing setup',  color:'#1a5276', bg:'#e8f0f8', tasks:[
@@ -340,25 +358,33 @@ const CHECK_CLASS   = {'To Do':'','In Progress':'progress','Completed':'done','N
 const CHECK_ICON    = {'To Do':'','In Progress':'~','Completed':'✓','N/A':'—'};
 
 let state = { listings:[], activeId:null, view:'empty' };
-let editingTask = null; // {listingId, taskId}
-let openPhases = {}; // phaseId -> bool
+let editingTask = null; 
+let openPhases = {}; 
 let openDropdown = null;
 
-// ── PERSISTENCE ──────────────────────────────────────────────────────────────
-function save() {
-  try { localStorage.setItem('eden_listings_v1', JSON.stringify(state)); } catch(e){}
-}
-function load() {
-  try {
-    const d = localStorage.getItem('eden_listings_v1');
-    if (d) state = JSON.parse(d);
-  } catch(e){}
-}
+// Ensure all default phases are open
+PHASES.forEach(p => { if (openPhases[p.id]===undefined) openPhases[p.id]=true; });
+
+// ── WINDOW BINDINGS ──────────────────────────────────────────────────────────
+// Because we are using type="module", functions must be exposed to window 
+// to be usable by inline HTML onclick attributes
+window.showView = showView;
+window.openNewListing = openNewListing;
+window.closeNewListing = closeNewListing;
+window.createListing = createListing;
+window.deleteListing = deleteListing;
+window.cycleStatus = cycleStatus;
+window.toggleAssignDropdown = toggleAssignDropdown;
+window.assignTask = assignTask;
+window.openEditTask = openEditTask;
+window.closeEditTask = closeEditTask;
+window.saveEditTask = saveEditTask;
+window.togglePhase = togglePhase;
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function uid() { return '_'+Math.random().toString(36).slice(2,9); }
 function pct(tasks) {
-  if (!tasks.length) return 0;
+  if (!tasks?.length) return 0;
   return Math.round(tasks.filter(t=>t.status==='Completed'||t.status==='N/A').length / tasks.length * 100);
 }
 function el(id) { return document.getElementById(id); }
@@ -370,13 +396,55 @@ function defaultTasks() {
   })));
 }
 
+// ── REAL-TIME DATABASE LISTENER ───────────────────────────────────────────────
+function initFirebaseListener() {
+  const listingsRef = collection(db, "listings");
+  
+  onSnapshot(listingsRef, (snapshot) => {
+    const loadedListings = [];
+    snapshot.forEach((doc) => {
+      loadedListings.push({ id: doc.id, ...doc.data() });
+    });
+    
+    // Default to natural sort/order. You can sort by createdAt here if needed.
+    state.listings = loadedListings;
+
+    // Correct view states based on loaded data
+    if (!state.activeId && loadedListings.length > 0) {
+      state.activeId = loadedListings[0].id;
+      state.view = 'listing';
+    } else if (state.activeId && !loadedListings.find(l => l.id === state.activeId)) {
+      state.activeId = loadedListings.length > 0 ? loadedListings[0].id : null;
+      state.view = state.activeId ? 'listing' : 'empty';
+    } else if (loadedListings.length === 0) {
+      state.activeId = null;
+      state.view = 'empty';
+    }
+
+    renderSidebar();
+    renderContent();
+  }, (error) => {
+    console.error("Firestore listener error:", error);
+  });
+}
+
+// ── AUTHENTICATION ────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    // User is logged in automatically, initiate sync
+    initFirebaseListener();
+  } else {
+    // Attempt anonymous login if not logged in
+    signInAnonymously(auth).catch(err => console.error("Auth error:", err));
+  }
+});
+
 // ── VIEWS ────────────────────────────────────────────────────────────────────
 function showView(v, listingId) {
   state.view = v;
   if (listingId) state.activeId = listingId;
   renderSidebar();
   renderContent();
-  save();
 }
 
 function renderSidebar() {
@@ -419,7 +487,7 @@ function renderContent() {
 
 // ── LISTING VIEW ─────────────────────────────────────────────────────────────
 function buildListingView(l) {
-  const tasks = l.tasks;
+  const tasks = l.tasks || [];
   const done = tasks.filter(t=>t.status==='Completed').length;
   const prog = tasks.filter(t=>t.status==='In Progress').length;
   const na   = tasks.filter(t=>t.status==='N/A').length;
@@ -502,9 +570,11 @@ function buildTeamView() {
   const cards = members.map(m => {
     const rows = [];
     state.listings.forEach(l => {
-      l.tasks.forEach(t => {
-        if (t.assignee===m||t.assignee==='Team') rows.push({...t,address:l.address});
-      });
+      if(l.tasks) {
+        l.tasks.forEach(t => {
+          if (t.assignee===m||t.assignee==='Team') rows.push({...t,address:l.address});
+        });
+      }
     });
     const pending = rows.filter(t=>t.status==='To Do'||t.status==='In Progress');
     const done    = rows.filter(t=>t.status==='Completed');
@@ -541,17 +611,18 @@ function buildTeamView() {
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function buildDashboard() {
   const listings = state.listings;
-  const allTasks = listings.flatMap(l=>l.tasks);
+  const allTasks = listings.flatMap(l=>l.tasks || []);
   const totalDone = allTasks.filter(t=>t.status==='Completed').length;
   const totalPending = allTasks.filter(t=>t.status==='To Do').length;
   const avgPct = listings.length ? Math.round(listings.reduce((a,l)=>a+pct(l.tasks),0)/listings.length) : 0;
 
   const rows = listings.map(l => {
     const p = pct(l.tasks);
-    const done = l.tasks.filter(t=>t.status==='Completed').length;
-    const prog = l.tasks.filter(t=>t.status==='In Progress').length;
+    const tasks = l.tasks || [];
+    const done = tasks.filter(t=>t.status==='Completed').length;
+    const prog = tasks.filter(t=>t.status==='In Progress').length;
     const pills = PHASES.map(ph=>{
-      const ptasks = l.tasks.filter(t=>t.phaseId===ph.id);
+      const ptasks = tasks.filter(t=>t.phaseId===ph.id);
       const pp = pct(ptasks);
       return `<span class="phase-pill${pp===100?' full':''}">${ph.label.split(' ').pop()} ${pp}%</span>`;
     }).join('');
@@ -592,40 +663,72 @@ function buildEmpty() {
   </div>`;
 }
 
-// ── ACTIONS ──────────────────────────────────────────────────────────────────
+// ── ACTIONS & DB WRITES ───────────────────────────────────────────────────────
 function openNewListing() { el('new-modal').style.display='flex'; el('new-address').value=''; setTimeout(()=>el('new-address').focus(),50); }
 function closeNewListing() { el('new-modal').style.display='none'; }
-function createListing() {
+
+async function createListing() {
   const addr = el('new-address').value.trim();
   if (!addr) return;
-  const l = { id:uid(), address:addr, createdAt:new Date().toLocaleDateString('en-CA'), tasks:defaultTasks() };
-  state.listings.push(l);
-  state.activeId = l.id;
-  state.view = 'listing';
+  const newId = uid();
+  const l = { id: newId, address: addr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: defaultTasks() };
+  
   closeNewListing();
-  save();
+  
+  // Optimistic UI Update
+  state.listings.push(l);
+  state.activeId = newId;
+  state.view = 'listing';
   renderSidebar();
   renderContent();
+
+  // Firestore DB write
+  try {
+    await setDoc(doc(db, "listings", newId), l);
+  } catch (err) {
+    console.error("Failed to create listing in DB:", err);
+  }
 }
 
-function deleteListing(id) {
+async function deleteListing(id) {
   if (!confirm('Delete this listing and all its tasks?')) return;
+  
+  // Optimistic Update
   state.listings = state.listings.filter(l=>l.id!==id);
   if (state.activeId===id) {
     state.activeId = state.listings.length ? state.listings[state.listings.length-1].id : null;
     state.view = state.activeId ? 'listing' : 'empty';
   }
-  save(); renderSidebar(); renderContent();
+  renderSidebar(); renderContent();
+
+  // DB update
+  try {
+    await deleteDoc(doc(db, "listings", id));
+  } catch (err) {
+    console.error("Failed to delete from DB:", err);
+  }
 }
 
-function cycleStatus(listingId, taskId) {
+// Helper to push individual task modifications safely
+async function syncTasksToDb(listingId) {
+  const l = state.listings.find(x => x.id === listingId);
+  if (!l) return;
+  try {
+    await updateDoc(doc(db, "listings", listingId), { tasks: l.tasks });
+  } catch(e) {
+    console.error("Error updating tasks in DB:", e);
+  }
+}
+
+async function cycleStatus(listingId, taskId) {
   const l = state.listings.find(x=>x.id===listingId);
   if (!l) return;
   const t = l.tasks.find(x=>x.id===taskId);
   if (!t) return;
+  
   t.status = STATUS_CYCLE[t.status]||'To Do';
-  save();
-  // Patch DOM without full re-render for speed
+
+  // Fast DOM Patching without full re-render
   const row = document.getElementById('row_'+taskId);
   if (row) {
     const btn = row.querySelector('.check-btn');
@@ -634,13 +737,15 @@ function cycleStatus(listingId, taskId) {
     const txt = row.querySelector('.task-text');
     txt.className = 'task-text'+(t.status==='Completed'?' done':'');
   }
-  // Update sidebar pill
-  const sl = state.listings.find(x=>x.id===listingId);
+  
+  // Update sidebar pill & stats optimistically
   const pills = document.querySelectorAll('#listing-nav .pill');
   const btns  = document.querySelectorAll('#listing-nav .sidebar-btn');
-  btns.forEach((b,i) => { if(state.listings[i]&&state.listings[i].id===listingId) { pills[i].textContent=pct(sl.tasks)+'%'; } });
-  // Update stat cards if visible
+  btns.forEach((b,i) => { if(state.listings[i]&&state.listings[i].id===listingId) { pills[i].textContent=pct(l.tasks)+'%'; } });
   renderProgressStats(listingId);
+
+  // Sync to database
+  await syncTasksToDb(listingId);
 }
 
 function renderProgressStats(listingId) {
@@ -660,6 +765,7 @@ function renderProgressStats(listingId) {
   if (nums[3]) nums[3].textContent = p+'%';
   const fill = document.querySelector('.progress-bar-fill');
   if (fill) fill.style.width = p+'%';
+  
   // phase counts
   document.querySelectorAll('.phase-block').forEach(b => {
     const pid = b.dataset.phase;
@@ -683,13 +789,14 @@ function toggleAssignDropdown(e, listingId, taskId) {
 }
 document.addEventListener('click', ()=>{ if(openDropdown){ el(openDropdown).style.display='none'; openDropdown=null; }});
 
-function assignTask(listingId, taskId, member) {
+async function assignTask(listingId, taskId, member) {
   const l = state.listings.find(x=>x.id===listingId);
   if (!l) return;
   const t = l.tasks.find(x=>x.id===taskId);
   if (!t) return;
   t.assignee = member;
-  save();
+  
+  // Fast DOM patch
   const row = document.getElementById('row_'+taskId);
   if (row) {
     const badge = row.querySelector('.badge');
@@ -697,6 +804,9 @@ function assignTask(listingId, taskId, member) {
     badge.textContent = member+' ▾';
   }
   if (openDropdown) { el(openDropdown).style.display='none'; openDropdown=null; }
+
+  // Sync to database
+  await syncTasksToDb(listingId);
 }
 
 function openEditTask(listingId, taskId) {
@@ -712,20 +822,27 @@ function openEditTask(listingId, taskId) {
   el('edit-modal').style.display='flex';
 }
 function closeEditTask() { el('edit-modal').style.display='none'; editingTask=null; }
-function saveEditTask() {
+
+async function saveEditTask() {
   if (!editingTask) return;
   const {listingId, taskId} = editingTask;
   const l = state.listings.find(x=>x.id===listingId);
   if (!l) return;
   const t = l.tasks.find(x=>x.id===taskId);
   if (!t) return;
+  
   t.assignee = el('edit-assignee').value;
   t.status   = el('edit-status').value;
   t.notes    = el('edit-notes').value.trim();
-  save();
+  
   closeEditTask();
+  
+  // Optimistic UI render
   renderSidebar();
   renderContent();
+
+  // Sync to database
+  await syncTasksToDb(listingId);
 }
 
 function togglePhase(phaseId) {
@@ -739,19 +856,6 @@ function togglePhase(phaseId) {
   toggle.classList.toggle('open', !isOpen);
   openPhases[phaseId] = !isOpen;
 }
-
-// ── INIT ─────────────────────────────────────────────────────────────────────
-load();
-if (state.listings.length && state.activeId && state.view==='listing') {
-  // all good
-} else if (state.listings.length) {
-  state.activeId = state.listings[0].id;
-  state.view = 'listing';
-}
-// default all phases open
-PHASES.forEach(p => { if (openPhases[p.id]===undefined) openPhases[p.id]=true; });
-renderSidebar();
-renderContent();
 </script>
 </body>
 </html>
