@@ -84,12 +84,17 @@
   .phase-toggle { color: var(--muted); font-size: 18px; transition: transform 0.2s; }
   .phase-toggle.open { transform: rotate(180deg); }
 
-  /* Tasks */
-  .task-list { padding: 4px 0; }
-  .task-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border-soft); transition: background 0.1s; }
+  /* Tasks & Drag and Drop */
+  .task-list { padding: 4px 0; min-height: 10px; }
+  .task-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 16px 10px 10px; border-bottom: 1px solid var(--border-soft); transition: background 0.1s; cursor: grab; background: var(--surface); }
+  .task-row:active { cursor: grabbing; }
+  .task-row.dragging { opacity: 0.4; background: var(--accent-light); border: 1px dashed var(--accent); }
   .task-row:last-child { border-bottom: none; }
   .task-row:hover { background: var(--bg); }
-  .add-task-btn { padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; text-align: center; border-top: 1px dashed var(--border-soft); transition: all 0.1s; }
+  .drag-handle { color: #d0cec5; display: flex; align-items: center; justify-content: center; cursor: grab; padding-top: 3px; transition: color 0.15s; }
+  .task-row:hover .drag-handle { color: var(--muted); }
+  
+  .add-task-btn { padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; text-align: center; border-top: 1px dashed var(--border-soft); transition: all 0.1s; background: var(--surface); }
   .add-task-btn:hover { background: var(--bg); color: var(--text); }
   .check-btn { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; transition: all 0.15s; font-size: 11px; }
   .check-btn.done { background: var(--green); border-color: var(--green); color: #fff; }
@@ -372,8 +377,6 @@ let openDropdown = null;
 PHASES.forEach(p => { if (openPhases[p.id]===undefined) openPhases[p.id]=true; });
 
 // ── WINDOW BINDINGS ──────────────────────────────────────────────────────────
-// Because we are using type="module", functions must be exposed to window 
-// to be usable by inline HTML onclick attributes
 window.showView = showView;
 window.openNewListing = openNewListing;
 window.closeNewListing = closeNewListing;
@@ -404,6 +407,96 @@ function defaultTasks() {
   })));
 }
 
+// ── DRAG AND DROP REORDERING ────────────────────────────────────────────────
+let draggedTaskEl = null;
+
+document.addEventListener('dragstart', (e) => {
+  const row = e.target.closest('.task-row');
+  if (row && e.target.nodeType === 1) { // Node.ELEMENT_NODE
+    draggedTaskEl = row;
+    // Delay adding the dragging class so it still looks normal on the phantom cursor
+    setTimeout(() => row.classList.add('dragging'), 0);
+  }
+});
+
+document.addEventListener('dragover', (e) => {
+  if (!draggedTaskEl) return;
+  e.preventDefault(); // allow drop
+  const list = e.target.closest('.task-list');
+  if (!list) return;
+
+  const afterElement = getDragAfterElement(list, e.clientY);
+  const addTaskBtn = list.querySelector('.add-task-btn');
+
+  // Insert before the specific element, or append if null (but always before the add button)
+  if (afterElement == null) {
+    if (addTaskBtn) {
+      list.insertBefore(draggedTaskEl, addTaskBtn);
+    } else {
+      list.appendChild(draggedTaskEl);
+    }
+  } else {
+    list.insertBefore(draggedTaskEl, afterElement);
+  }
+});
+
+document.addEventListener('dragend', async (e) => {
+  if (!draggedTaskEl) return;
+  draggedTaskEl.classList.remove('dragging');
+  draggedTaskEl = null;
+
+  if (state.view === 'listing' && state.activeId) {
+    await saveDOMOrderToState();
+  }
+});
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.task-row:not(.dragging)')];
+
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// Read the new physical DOM sequence and push it to array/database
+async function saveDOMOrderToState() {
+  const l = state.listings.find(x => x.id === state.activeId);
+  if (!l) return;
+  
+  const newTasks = [];
+  
+  // Reconstruct the tasks array strictly matching the new DOM layout
+  document.querySelectorAll('.phase-block').forEach(block => {
+    const phaseId = block.dataset.phase;
+    block.querySelectorAll('.task-row').forEach(row => {
+      const taskId = row.id.replace('row_', '');
+      const task = l.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.phaseId = phaseId; // Update phase ID in case it was dragged to a new block
+        newTasks.push(task);
+      }
+    });
+  });
+
+  // Keep any tasks not rendered on screen to prevent data loss just in case
+  const renderedIds = new Set(newTasks.map(t => t.id));
+  const unrenderedTasks = l.tasks.filter(t => !renderedIds.has(t.id));
+  
+  l.tasks = [...newTasks, ...unrenderedTasks];
+
+  // Instantly update phase progress stats visually based on new grouping
+  renderProgressStats(state.activeId);
+  
+  // Sync new sorting sequence directly to firebase
+  await syncTasksToDb(state.activeId);
+}
+
 // ── REAL-TIME DATABASE LISTENER ───────────────────────────────────────────────
 function initFirebaseListener() {
   const listingsRef = collection(db, "listings");
@@ -414,10 +507,8 @@ function initFirebaseListener() {
       loadedListings.push({ id: doc.id, ...doc.data() });
     });
     
-    // Default to natural sort/order. You can sort by createdAt here if needed.
     state.listings = loadedListings;
 
-    // Correct view states based on loaded data
     if (!state.activeId && loadedListings.length > 0) {
       state.activeId = loadedListings[0].id;
       state.view = 'listing';
@@ -429,8 +520,12 @@ function initFirebaseListener() {
       state.view = 'empty';
     }
 
+    // Only fully re-render the content area if we are NOT actively dragging an element
+    // This stops sudden Firebase syncs from snapping the UI while you're holding a card.
     renderSidebar();
-    renderContent();
+    if (!draggedTaskEl) {
+      renderContent();
+    }
   }, (error) => {
     console.error("Firestore listener error:", error);
   });
@@ -439,10 +534,8 @@ function initFirebaseListener() {
 // ── AUTHENTICATION ────────────────────────────────────────────────────────────
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    // User is logged in automatically, initiate sync
     initFirebaseListener();
   } else {
-    // Attempt anonymous login if not logged in
     signInAnonymously(auth).catch(err => console.error("Auth error:", err));
   }
 });
@@ -555,7 +648,14 @@ function buildTaskRow(listingId, t) {
   const isDone = t.status==='Completed';
   const note = t.notes ? `<div class="task-note">${t.notes}</div>` : '';
   return `
-  <div class="task-row" id="row_${t.id}">
+  <div class="task-row" id="row_${t.id}" draggable="true">
+    <div class="drag-handle" title="Drag to reorder">
+      <svg width="10" height="14" viewBox="0 0 8 14" fill="currentColor">
+        <circle cx="2" cy="3" r="1.2"/><circle cx="6" cy="3" r="1.2"/>
+        <circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/>
+        <circle cx="2" cy="11" r="1.2"/><circle cx="6" cy="11" r="1.2"/>
+      </svg>
+    </div>
     <button class="check-btn ${cc}" onclick="cycleStatus('${listingId}','${t.id}')" title="Click to change status">${ci}</button>
     <div class="task-body">
       <div class="task-text${isDone?' done':''}">${t.text}</div>
