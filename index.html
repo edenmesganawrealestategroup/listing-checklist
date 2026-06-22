@@ -59,6 +59,10 @@
   .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; gap: 16px; }
   .page-title { font-size: 20px; font-weight: 600; color: var(--text); }
   .page-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .btn-outline { padding: 7px 10px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--text); transition: all 0.12s; }
+  .btn-outline:hover { background: var(--bg); }
+  .btn-danger { color: var(--muted); }
+  .btn-danger:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
   .delete-btn { padding: 7px 10px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.12s; }
   .delete-btn:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
 
@@ -241,14 +245,36 @@
 <div class="modal-overlay" id="new-modal" style="display:none" onclick="if(event.target===this)closeNewListing()">
   <div class="modal">
     <div class="modal-title">New listing</div>
-    <div class="modal-sub">Enter the property address. All 39 checklist tasks will be loaded automatically across 5 phases.</div>
+    <div class="modal-sub">Enter the property address and select a checklist template.</div>
     <div class="form-group">
       <label class="form-label">Property address</label>
       <input class="form-input" id="new-address" placeholder="e.g. 123 Main St, Toronto ON" onkeydown="if(event.key==='Enter')createListing()">
     </div>
+    <div class="form-group">
+      <label class="form-label">Template</label>
+      <select class="form-input" id="new-template">
+        <option value="default">Default Checklist</option>
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeNewListing()">Cancel</button>
       <button class="btn-primary" onclick="createListing()">Create listing</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE TEMPLATE MODAL -->
+<div class="modal-overlay" id="save-template-modal" style="display:none" onclick="if(event.target===this)closeSaveTemplate()">
+  <div class="modal">
+    <div class="modal-title">Save as template</div>
+    <div class="modal-sub">Save this checklist's tasks as a reusable template (e.g. "Condo For Sale").</div>
+    <div class="form-group">
+      <label class="form-label">Template name</label>
+      <input class="form-input" id="template-name" placeholder="e.g. Freehold for Lease" onkeydown="if(event.key==='Enter')saveTemplate()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSaveTemplate()">Cancel</button>
+      <button class="btn-primary" onclick="saveTemplate()">Save template</button>
     </div>
   </div>
 </div>
@@ -292,7 +318,7 @@
 // ── FIREBASE INTEGRATION ────────────────────────────────────────────────────
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBvNn626SLrRXaND7jcrbYRVsb0u6X6Fl8",
@@ -368,10 +394,11 @@ const STATUS_CLASS  = {'To Do':'b-todo','In Progress':'b-progress','Completed':'
 const CHECK_CLASS   = {'To Do':'','In Progress':'progress','Completed':'done','N/A':'na'};
 const CHECK_ICON    = {'To Do':'','In Progress':'~','Completed':'✓','N/A':'—'};
 
-let state = { listings:[], activeId:null, view:'empty' };
+let state = { listings:[], templates:[], activeId:null, view:'empty' };
 let editingTask = null; 
 let openPhases = {}; 
 let openDropdown = null;
+let templateSourceId = null;
 
 // Ensure all default phases are open
 PHASES.forEach(p => { if (openPhases[p.id]===undefined) openPhases[p.id]=true; });
@@ -382,6 +409,10 @@ window.openNewListing = openNewListing;
 window.closeNewListing = closeNewListing;
 window.createListing = createListing;
 window.deleteListing = deleteListing;
+window.duplicateListing = duplicateListing;
+window.openSaveTemplate = openSaveTemplate;
+window.closeSaveTemplate = closeSaveTemplate;
+window.saveTemplate = saveTemplate;
 window.cycleStatus = cycleStatus;
 window.toggleAssignDropdown = toggleAssignDropdown;
 window.assignTask = assignTask;
@@ -529,6 +560,15 @@ function initFirebaseListener() {
   }, (error) => {
     console.error("Firestore listener error:", error);
   });
+
+  // Listen for team templates
+  const templatesRef = collection(db, "templates");
+  onSnapshot(templatesRef, (snapshot) => {
+    state.templates = [];
+    snapshot.forEach((doc) => {
+      state.templates.push({ id: doc.id, ...doc.data() });
+    });
+  });
 }
 
 // ── AUTHENTICATION ────────────────────────────────────────────────────────────
@@ -622,7 +662,11 @@ function buildListingView(l) {
       <div class="page-title">${l.address}</div>
       <div class="page-meta">Created ${l.createdAt} · ${tasks.length} tasks total</div>
     </div>
-    <button class="delete-btn" onclick="deleteListing('${l.id}')">🗑 Delete</button>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-outline" onclick="openSaveTemplate('${l.id}')">💾 Save as template</button>
+      <button class="btn-outline" onclick="duplicateListing('${l.id}')">⎘ Duplicate</button>
+      <button class="btn-outline btn-danger" onclick="deleteListing('${l.id}')">🗑 Delete</button>
+    </div>
   </div>
   <div class="progress-section">
     <div class="progress-stats">
@@ -773,14 +817,43 @@ function buildEmpty() {
 }
 
 // ── ACTIONS & DB WRITES ───────────────────────────────────────────────────────
-function openNewListing() { el('new-modal').style.display='flex'; el('new-address').value=''; setTimeout(()=>el('new-address').focus(),50); }
+function openNewListing() { 
+  el('new-modal').style.display='flex'; 
+  el('new-address').value=''; 
+  
+  const tplSelect = el('new-template');
+  tplSelect.innerHTML = '<option value="default">Default Checklist</option>' + 
+    state.templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+    
+  setTimeout(()=>el('new-address').focus(),50); 
+}
 function closeNewListing() { el('new-modal').style.display='none'; }
 
 async function createListing() {
   const addr = el('new-address').value.trim();
   if (!addr) return;
   const newId = uid();
-  const l = { id: newId, address: addr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: defaultTasks() };
+  
+  const tplId = el('new-template').value;
+  let tasksToUse = [];
+  
+  if (tplId === 'default') {
+    tasksToUse = defaultTasks();
+  } else {
+    const tpl = state.templates.find(t => t.id === tplId);
+    if (tpl) {
+      // Clone tasks and generate fresh IDs, reset status
+      tasksToUse = tpl.tasks.map(t => ({
+        ...t,
+        id: t.id.split('_')[0] + '_' + uid(),
+        status: 'To Do'
+      }));
+    } else {
+      tasksToUse = defaultTasks();
+    }
+  }
+  
+  const l = { id: newId, address: addr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: tasksToUse };
   
   closeNewListing();
   
@@ -796,6 +869,71 @@ async function createListing() {
     await setDoc(doc(db, "listings", newId), l);
   } catch (err) {
     console.error("Failed to create listing in DB:", err);
+  }
+}
+
+async function duplicateListing(id) {
+  const l = state.listings.find(x => x.id === id);
+  if (!l) return;
+  
+  const newAddr = prompt("Enter property address for the duplicate listing:", l.address + " (Copy)");
+  if (!newAddr) return;
+  
+  const newId = uid();
+  // Clone all tasks exactly as they are ordered, reset statuses to To Do
+  const clonedTasks = l.tasks.map(t => ({
+    ...t,
+    id: t.id.split('_')[0] + '_' + uid(),
+    status: 'To Do'
+  }));
+  
+  const newL = { id: newId, address: newAddr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: clonedTasks };
+  
+  // Optimistic Update
+  state.listings.push(newL);
+  state.activeId = newId;
+  state.view = 'listing';
+  renderSidebar(); renderContent();
+
+  // DB write
+  try {
+    await setDoc(doc(db, "listings", newId), newL);
+  } catch (err) {
+    console.error("Failed to duplicate listing in DB:", err);
+  }
+}
+
+function openSaveTemplate(id) {
+  templateSourceId = id;
+  el('template-name').value = '';
+  el('save-template-modal').style.display = 'flex';
+  setTimeout(()=>el('template-name').focus(),50);
+}
+function closeSaveTemplate() { el('save-template-modal').style.display = 'none'; templateSourceId = null; }
+
+async function saveTemplate() {
+  const name = el('template-name').value.trim();
+  if (!name || !templateSourceId) return;
+  
+  const l = state.listings.find(x => x.id === templateSourceId);
+  if (!l) return;
+  
+  // Clone current tasks to save into the template (resetting statuses)
+  const tplTasks = l.tasks.map(t => ({
+    ...t,
+    status: 'To Do'
+  }));
+  
+  const newTpl = { name, tasks: tplTasks };
+  
+  closeSaveTemplate();
+  
+  try {
+    await addDoc(collection(db, "templates"), newTpl);
+    alert(`Template "${name}" saved successfully! It will now appear in the dropdown when creating a new listing.`);
+  } catch (err) {
+    console.error("Failed to save template to DB:", err);
+    alert("Failed to save template.");
   }
 }
 
