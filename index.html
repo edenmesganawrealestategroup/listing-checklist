@@ -63,8 +63,6 @@
   .btn-outline:hover { background: var(--bg); }
   .btn-danger { color: var(--muted); }
   .btn-danger:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
-  .delete-btn { padding: 7px 10px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.12s; }
-  .delete-btn:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
 
   /* Progress bar */
   .progress-section { margin-bottom: 24px; }
@@ -110,14 +108,9 @@
   .task-note { font-size: 11px; color: var(--muted); margin-top: 3px; font-style: italic; }
   .task-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   
-  /* Badges */
+  /* Badges & Avatars */
   .badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; white-space: nowrap; cursor: pointer; border: none; transition: opacity 0.12s; }
   .badge:hover { opacity: 0.8; }
-  .b-eden { background: #dce8f5; color: #1a4f7a; }
-  .b-jv { background: #e8e6fa; color: #4a3fa0; }
-  .b-hector { background: #fae6ef; color: #8a2545; }
-  .b-clarisse { background: #d8f0e8; color: #0d6045; }
-  .b-team { background: #fce8e8; color: #8b1f1f; }
   .b-todo { background: var(--gray-light); color: var(--muted); }
   .b-progress { background: var(--amber-light); color: var(--amber); }
   .b-done { background: var(--green-light); color: var(--green); }
@@ -153,10 +146,6 @@
   .team-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
   .team-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
-  .av-eden { background: #dce8f5; color: #1a4f7a; }
-  .av-jv { background: #e8e6fa; color: #4a3fa0; }
-  .av-hector { background: #fae6ef; color: #8a2545; }
-  .av-clarisse { background: #d8f0e8; color: #0d6045; }
   .team-name { font-size: 14px; font-weight: 600; }
   .team-role { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .team-stats { margin-left: auto; display: flex; gap: 6px; }
@@ -290,9 +279,8 @@
     <div class="form-row">
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label">Assigned to</label>
-        <select class="form-input" id="edit-assignee">
-          <option>Eden</option><option>JV</option><option>Hector</option><option>Clarisse</option><option>Team</option>
-        </select>
+        <!-- Populated Dynamically -->
+        <select class="form-input" id="edit-assignee"></select>
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label">Status</label>
@@ -313,9 +301,22 @@
   </div>
 </div>
 
-<!-- Ensure you use type="module" to enable Firebase imports -->
+<!-- CUSTOM DIALOG MODAL (Replaces all native alerts/prompts) -->
+<div class="modal-overlay" id="dialog-modal" style="display:none; z-index:300;">
+  <div class="modal" style="max-width: 400px;">
+    <div class="modal-title" id="dialog-title">Title</div>
+    <div class="modal-sub" id="dialog-sub" style="margin-bottom: 20px;">Message</div>
+    <div class="form-group" id="dialog-input-group" style="display:none; margin-bottom: 20px;">
+      <input class="form-input" id="dialog-input" type="text" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="dialog-cancel">Cancel</button>
+      <button class="btn-primary" id="dialog-confirm">OK</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
-// ── FIREBASE INTEGRATION ────────────────────────────────────────────────────
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -333,9 +334,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// ── DATA ────────────────────────────────────────────────────────────────────
 const PHASES = [
-  { id:'setup',    label:'Pre-listing setup',  color:'#1a5276', bg:'#e8f0f8', tasks:[
+  { id:'setup',     label:'Pre-listing setup',  color:'#1a5276', bg:'#e8f0f8', tasks:[
     {id:'t1',  text:'Receive seller contact info & update in Mojo', assignee:'Team', notes:'Ask for IDs before launching — needed for Fintrac'},
     {id:'t2',  text:'Receive property info for MLS and Repree listing forms', assignee:'Team', notes:''},
     {id:'t3',  text:'Remind Eden about missing info — utility bills, tax, upgrades/features', assignee:'Team', notes:''},
@@ -389,12 +389,17 @@ const PHASES = [
 const STATUSES = ['To Do','In Progress','Completed','N/A'];
 const STATUS_CYCLE = {[STATUSES[0]]:STATUSES[1],[STATUSES[1]]:STATUSES[2],[STATUSES[2]]:STATUSES[3],[STATUSES[3]]:STATUSES[0]};
 
-const MEMBER_CLASS = {Eden:'b-eden',JV:'b-jv',Hector:'b-hector',Clarisse:'b-clarisse',Team:'b-team'};
 const STATUS_CLASS  = {'To Do':'b-todo','In Progress':'b-progress','Completed':'b-done','N/A':'b-na'};
 const CHECK_CLASS   = {'To Do':'','In Progress':'progress','Completed':'done','N/A':'na'};
 const CHECK_ICON    = {'To Do':'','In Progress':'~','Completed':'✓','N/A':'—'};
 
-let state = { listings:[], templates:[], activeId:null, view:'empty' };
+let state = { 
+  listings: [], 
+  templates: [], 
+  members: ['Eden', 'JV', 'Hector', 'Clarisse', 'Krisha'], // Defaults, Krisha is now baked in!
+  activeId: null, 
+  view: 'empty' 
+};
 let editingTask = null; 
 let openPhases = {}; 
 let openDropdown = null;
@@ -422,8 +427,9 @@ window.closeEditTask = closeEditTask;
 window.saveEditTask = saveEditTask;
 window.deleteTask = deleteTask;
 window.togglePhase = togglePhase;
+window.addNewMember = addNewMember;
 
-// ── HELPERS ──────────────────────────────────────────────────────────────────
+// ── UTILS ──────────────────────────────────────────────────────────────────
 function uid() { return '_'+Math.random().toString(36).slice(2,9); }
 function pct(tasks) {
   if (!tasks?.length) return 0;
@@ -438,28 +444,85 @@ function defaultTasks() {
   })));
 }
 
+// Generate aesthetic colors dynamically for new members
+function getMemberStyle(name) {
+  const overrides = {
+    'Team': 'background:#fce8e8; color:#8b1f1f;',
+    'Eden': 'background:#dce8f5; color:#1a4f7a;',
+    'JV': 'background:#e8e6fa; color:#4a3fa0;',
+    'Hector': 'background:#fae6ef; color:#8a2545;',
+    'Clarisse': 'background:#d8f0e8; color:#0d6045;',
+    'Krisha': 'background:#f3e8fa; color:#6b258a;' // Krisha's explicit style
+  };
+  if (overrides[name]) return overrides[name];
+  
+  // Stable hash fallback for future added members
+  const colors = [
+    {bg:'#e0f2fe', fg:'#0369a1'}, {bg:'#fef08a', fg:'#854d0e'},
+    {bg:'#fed7aa', fg:'#c2410c'}, {bg:'#fbcfe8', fg:'#be185d'},
+    {bg:'#d9f99d', fg:'#4d7c0f'}, {bg:'#e9d5ff', fg:'#7e22ce'}
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const c = colors[Math.abs(hash) % colors.length];
+  return `background:${c.bg}; color:${c.fg};`;
+}
+
+// Replaces default browser dialogs with our safe custom UI modal
+function showDialog({ title, message, inputPlaceholder, isAlert }, callback) {
+  el('dialog-title').textContent = title;
+  el('dialog-sub').textContent = message || '';
+  el('dialog-input').value = '';
+  
+  if (inputPlaceholder !== undefined) {
+    el('dialog-input-group').style.display = 'block';
+    el('dialog-input').placeholder = inputPlaceholder;
+    setTimeout(()=>el('dialog-input').focus(), 50);
+  } else {
+    el('dialog-input-group').style.display = 'none';
+  }
+  
+  el('dialog-cancel').style.display = isAlert ? 'none' : 'block';
+  el('dialog-modal').style.display = 'flex';
+  
+  const cleanup = () => {
+    el('dialog-modal').style.display = 'none';
+    el('dialog-confirm').onclick = null;
+    el('dialog-cancel').onclick = null;
+  };
+  
+  el('dialog-cancel').onclick = () => { cleanup(); callback(null); };
+  el('dialog-confirm').onclick = () => { 
+    const val = inputPlaceholder !== undefined ? el('dialog-input').value : true;
+    cleanup(); 
+    callback(val); 
+  };
+  
+  el('dialog-input').onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); el('dialog-confirm').click(); }
+  }
+}
+
 // ── DRAG AND DROP REORDERING ────────────────────────────────────────────────
 let draggedTaskEl = null;
 
 document.addEventListener('dragstart', (e) => {
   const row = e.target.closest('.task-row');
-  if (row && e.target.nodeType === 1) { // Node.ELEMENT_NODE
+  if (row && e.target.nodeType === 1) { 
     draggedTaskEl = row;
-    // Delay adding the dragging class so it still looks normal on the phantom cursor
     setTimeout(() => row.classList.add('dragging'), 0);
   }
 });
 
 document.addEventListener('dragover', (e) => {
   if (!draggedTaskEl) return;
-  e.preventDefault(); // allow drop
+  e.preventDefault(); 
   const list = e.target.closest('.task-list');
   if (!list) return;
 
   const afterElement = getDragAfterElement(list, e.clientY);
   const addTaskBtn = list.querySelector('.add-task-btn');
 
-  // Insert before the specific element, or append if null (but always before the add button)
   if (afterElement == null) {
     if (addTaskBtn) {
       list.insertBefore(draggedTaskEl, addTaskBtn);
@@ -495,48 +558,38 @@ function getDragAfterElement(container, y) {
   }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
-// Read the new physical DOM sequence and push it to array/database
 async function saveDOMOrderToState() {
   const l = state.listings.find(x => x.id === state.activeId);
   if (!l) return;
   
   const newTasks = [];
-  
-  // Reconstruct the tasks array strictly matching the new DOM layout
   document.querySelectorAll('.phase-block').forEach(block => {
     const phaseId = block.dataset.phase;
     block.querySelectorAll('.task-row').forEach(row => {
       const taskId = row.id.replace('row_', '');
       const task = l.tasks.find(t => t.id === taskId);
       if (task) {
-        task.phaseId = phaseId; // Update phase ID in case it was dragged to a new block
+        task.phaseId = phaseId;
         newTasks.push(task);
       }
     });
   });
 
-  // Keep any tasks not rendered on screen to prevent data loss just in case
   const renderedIds = new Set(newTasks.map(t => t.id));
   const unrenderedTasks = l.tasks.filter(t => !renderedIds.has(t.id));
   
   l.tasks = [...newTasks, ...unrenderedTasks];
-
-  // Instantly update phase progress stats visually based on new grouping
   renderProgressStats(state.activeId);
-  
-  // Sync new sorting sequence directly to firebase
   await syncTasksToDb(state.activeId);
 }
 
 // ── REAL-TIME DATABASE LISTENER ───────────────────────────────────────────────
 function initFirebaseListener() {
+  // 1. Listen for listings
   const listingsRef = collection(db, "listings");
-  
   onSnapshot(listingsRef, (snapshot) => {
     const loadedListings = [];
-    snapshot.forEach((doc) => {
-      loadedListings.push({ id: doc.id, ...doc.data() });
-    });
+    snapshot.forEach((doc) => { loadedListings.push({ id: doc.id, ...doc.data() }); });
     
     state.listings = loadedListings;
 
@@ -551,24 +604,29 @@ function initFirebaseListener() {
       state.view = 'empty';
     }
 
-    // Only fully re-render the content area if we are NOT actively dragging an element
-    // This stops sudden Firebase syncs from snapping the UI while you're holding a card.
     renderSidebar();
-    if (!draggedTaskEl) {
-      renderContent();
-    }
-  }, (error) => {
-    console.error("Firestore listener error:", error);
-  });
+    if (!draggedTaskEl) renderContent();
+  }, (error) => console.error("Firestore listener error (listings):", error));
 
-  // Listen for team templates
+  // 2. Listen for templates
   const templatesRef = collection(db, "templates");
   onSnapshot(templatesRef, (snapshot) => {
     state.templates = [];
-    snapshot.forEach((doc) => {
-      state.templates.push({ id: doc.id, ...doc.data() });
-    });
-  });
+    snapshot.forEach((doc) => { state.templates.push({ id: doc.id, ...doc.data() }); });
+  }, (error) => console.error("Firestore listener error (templates):", error));
+  
+  // 3. Listen for dynamic team members configuration
+  const settingsRef = doc(db, "settings", "team");
+  onSnapshot(settingsRef, (docSnap) => {
+    if (docSnap.exists() && docSnap.data().members) {
+      state.members = docSnap.data().members;
+    } else {
+      // Fallback if settings doc hasn't been created yet
+      state.members = ['Eden', 'JV', 'Hector', 'Clarisse', 'Krisha'];
+    }
+    renderSidebar();
+    if (!draggedTaskEl) renderContent();
+  }, (error) => console.error("Firestore listener error (settings):", error));
 }
 
 // ── AUTHENTICATION ────────────────────────────────────────────────────────────
@@ -616,7 +674,8 @@ function renderContent() {
   } else {
     area.innerHTML = buildEmpty();
   }
-  // re-open phases that were open
+  
+  // Keep previously open phases toggled correctly
   document.querySelectorAll('.phase-block').forEach(b => {
     const pid = b.dataset.phase;
     const body = b.querySelector('.task-list');
@@ -688,9 +747,15 @@ function phaseEmoji(id) {
 function buildTaskRow(listingId, t) {
   const cc = CHECK_CLASS[t.status];
   const ci = CHECK_ICON[t.status];
-  const mb = MEMBER_CLASS[t.assignee]||'b-team';
   const isDone = t.status==='Completed';
   const note = t.notes ? `<div class="task-note">${t.notes}</div>` : '';
+  const mStyle = getMemberStyle(t.assignee || 'Team');
+  
+  // Map out dropdowns dynamically based on updated team structure
+  const ddOptions = [...state.members, 'Team'].map(m => 
+    `<div class="dropdown-item" onclick="assignTask('${listingId}','${t.id}','${m}')">${m}</div>`
+  ).join('');
+
   return `
   <div class="task-row" id="row_${t.id}" draggable="true">
     <div class="drag-handle" title="Drag to reorder">
@@ -707,9 +772,9 @@ function buildTaskRow(listingId, t) {
     </div>
     <div class="task-actions">
       <div class="dropdown-wrap">
-        <button class="badge ${mb}" onclick="toggleAssignDropdown(event,'${listingId}','${t.id}')">${t.assignee} ▾</button>
+        <button class="badge" style="${mStyle}" onclick="toggleAssignDropdown(event,'${listingId}','${t.id}')">${t.assignee} ▾</button>
         <div class="dropdown-menu" id="dd_${t.id}" style="display:none">
-          ${['Eden','JV','Hector','Clarisse','Team'].map(m=>`<div class="dropdown-item" onclick="assignTask('${listingId}','${t.id}','${m}')">${m}</div>`).join('')}
+          ${ddOptions}
         </div>
       </div>
       <button class="icon-btn" onclick="openEditTask('${listingId}','${t.id}')" title="Edit task">✎</button>
@@ -719,8 +784,7 @@ function buildTaskRow(listingId, t) {
 
 // ── TEAM VIEW ─────────────────────────────────────────────────────────────────
 function buildTeamView() {
-  const members = ['Eden','JV','Hector','Clarisse'];
-  const cards = members.map(m => {
+  const cards = state.members.map(m => {
     const rows = [];
     state.listings.forEach(l => {
       if(l.tasks) {
@@ -731,9 +795,14 @@ function buildTeamView() {
     });
     const pending = rows.filter(t=>t.status==='To Do'||t.status==='In Progress');
     const done    = rows.filter(t=>t.status==='Completed');
-    const avClass = `av-${m.toLowerCase()}`;
-    const initials = m==='JV'?'JV':m.slice(0,2).toUpperCase();
-    const role = m==='Eden'?'Main agent':'Assistant';
+    
+    // Auto-generate initials properly
+    let initials = m.slice(0,2).toUpperCase();
+    if(m === 'JV') initials = 'JV';
+    
+    const role = m==='Eden'?'Main agent':'Team Member';
+    const mStyle = getMemberStyle(m);
+    
     const items = pending.slice(0,6).map(t=>`
       <div class="team-task">
         <span class="badge ${STATUS_CLASS[t.status]}" style="flex-shrink:0;margin-top:1px">${t.status}</span>
@@ -744,7 +813,7 @@ function buildTeamView() {
     return `
     <div class="team-card">
       <div class="team-card-head">
-        <div class="avatar ${avClass}">${initials}</div>
+        <div class="avatar" style="${mStyle}">${initials}</div>
         <div><div class="team-name">${m}</div><div class="team-role">${role}</div></div>
         <div class="team-stats">
           <span class="mini-pill mp-pending">${pending.length} pending</span>
@@ -757,6 +826,7 @@ function buildTeamView() {
   return `
   <div class="page-header">
     <div><div class="page-title">Team accountability</div><div class="page-meta">Pending tasks per team member across all listings</div></div>
+    <button class="btn-primary" onclick="addNewMember()">+ Add Member</button>
   </div>
   <div class="team-grid">${cards}</div>`;
 }
@@ -817,6 +887,15 @@ function buildEmpty() {
 }
 
 // ── ACTIONS & DB WRITES ───────────────────────────────────────────────────────
+function populateAssigneeSelect(selectedValue) {
+  const sel = el('edit-assignee');
+  sel.innerHTML = '';
+  [...state.members, 'Team'].forEach(m => {
+    sel.innerHTML += `<option value="${m}">${m}</option>`;
+  });
+  if (selectedValue) sel.value = selectedValue;
+}
+
 function openNewListing() { 
   el('new-modal').style.display='flex'; 
   el('new-address').value=''; 
@@ -842,7 +921,6 @@ async function createListing() {
   } else {
     const tpl = state.templates.find(t => t.id === tplId);
     if (tpl) {
-      // Clone tasks and generate fresh IDs, reset status
       tasksToUse = tpl.tasks.map(t => ({
         ...t,
         id: t.id.split('_')[0] + '_' + uid(),
@@ -854,53 +932,46 @@ async function createListing() {
   }
   
   const l = { id: newId, address: addr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: tasksToUse };
-  
   closeNewListing();
   
-  // Optimistic UI Update
   state.listings.push(l);
   state.activeId = newId;
   state.view = 'listing';
   renderSidebar();
   renderContent();
 
-  // Firestore DB write
-  try {
-    await setDoc(doc(db, "listings", newId), l);
-  } catch (err) {
-    console.error("Failed to create listing in DB:", err);
-  }
+  try { await setDoc(doc(db, "listings", newId), l); } 
+  catch (err) { console.error("Failed to create listing in DB:", err); }
 }
 
-async function duplicateListing(id) {
+function duplicateListing(id) {
   const l = state.listings.find(x => x.id === id);
   if (!l) return;
   
-  const newAddr = prompt("Enter property address for the duplicate listing:", l.address + " (Copy)");
-  if (!newAddr) return;
-  
-  const newId = uid();
-  // Clone all tasks exactly as they are ordered, reset statuses to To Do
-  const clonedTasks = l.tasks.map(t => ({
-    ...t,
-    id: t.id.split('_')[0] + '_' + uid(),
-    status: 'To Do'
-  }));
-  
-  const newL = { id: newId, address: newAddr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: clonedTasks };
-  
-  // Optimistic Update
-  state.listings.push(newL);
-  state.activeId = newId;
-  state.view = 'listing';
-  renderSidebar(); renderContent();
+  showDialog({
+    title: 'Duplicate Listing',
+    message: 'Enter property address for the duplicate listing:',
+    inputPlaceholder: l.address + " (Copy)"
+  }, async (newAddr) => {
+    if (!newAddr) return;
+    
+    const newId = uid();
+    const clonedTasks = l.tasks.map(t => ({
+      ...t,
+      id: t.id.split('_')[0] + '_' + uid(),
+      status: 'To Do'
+    }));
+    
+    const newL = { id: newId, address: newAddr, createdAt: new Date().toLocaleDateString('en-CA'), tasks: clonedTasks };
+    
+    state.listings.push(newL);
+    state.activeId = newId;
+    state.view = 'listing';
+    renderSidebar(); renderContent();
 
-  // DB write
-  try {
-    await setDoc(doc(db, "listings", newId), newL);
-  } catch (err) {
-    console.error("Failed to duplicate listing in DB:", err);
-  }
+    try { await setDoc(doc(db, "listings", newId), newL); } 
+    catch (err) { console.error("Failed to duplicate listing in DB:", err); }
+  });
 }
 
 function openSaveTemplate(id) {
@@ -918,53 +989,41 @@ async function saveTemplate() {
   const l = state.listings.find(x => x.id === templateSourceId);
   if (!l) return;
   
-  // Clone current tasks to save into the template (resetting statuses)
-  const tplTasks = l.tasks.map(t => ({
-    ...t,
-    status: 'To Do'
-  }));
-  
+  const tplTasks = l.tasks.map(t => ({ ...t, status: 'To Do' }));
   const newTpl = { name, tasks: tplTasks };
-  
   closeSaveTemplate();
   
   try {
     await addDoc(collection(db, "templates"), newTpl);
-    alert(`Template "${name}" saved successfully! It will now appear in the dropdown when creating a new listing.`);
+    showDialog({ title: 'Template Saved', message: `Template "${name}" saved successfully!`, isAlert: true }, ()=>{});
   } catch (err) {
     console.error("Failed to save template to DB:", err);
-    alert("Failed to save template.");
+    showDialog({ title: 'Error', message: 'Failed to save template.', isAlert: true }, ()=>{});
   }
 }
 
-async function deleteListing(id) {
-  if (!confirm('Delete this listing and all its tasks?')) return;
-  
-  // Optimistic Update
-  state.listings = state.listings.filter(l=>l.id!==id);
-  if (state.activeId===id) {
-    state.activeId = state.listings.length ? state.listings[state.listings.length-1].id : null;
-    state.view = state.activeId ? 'listing' : 'empty';
-  }
-  renderSidebar(); renderContent();
-
-  // DB update
-  try {
-    await deleteDoc(doc(db, "listings", id));
-  } catch (err) {
-    console.error("Failed to delete from DB:", err);
-  }
+function deleteListing(id) {
+  showDialog({
+    title: 'Delete Listing',
+    message: 'Delete this listing and all its tasks? This action cannot be undone.'
+  }, async (confirmed) => {
+    if (!confirmed) return;
+    state.listings = state.listings.filter(l=>l.id!==id);
+    if (state.activeId===id) {
+      state.activeId = state.listings.length ? state.listings[state.listings.length-1].id : null;
+      state.view = state.activeId ? 'listing' : 'empty';
+    }
+    renderSidebar(); renderContent();
+    try { await deleteDoc(doc(db, "listings", id)); } 
+    catch (err) { console.error("Failed to delete from DB:", err); }
+  });
 }
 
-// Helper to push individual task modifications safely
 async function syncTasksToDb(listingId) {
   const l = state.listings.find(x => x.id === listingId);
   if (!l) return;
-  try {
-    await updateDoc(doc(db, "listings", listingId), { tasks: l.tasks });
-  } catch(e) {
-    console.error("Error updating tasks in DB:", e);
-  }
+  try { await updateDoc(doc(db, "listings", listingId), { tasks: l.tasks }); } 
+  catch(e) { console.error("Error updating tasks in DB:", e); }
 }
 
 async function cycleStatus(listingId, taskId) {
@@ -975,7 +1034,6 @@ async function cycleStatus(listingId, taskId) {
   
   t.status = STATUS_CYCLE[t.status]||'To Do';
 
-  // Fast DOM Patching without full re-render
   const row = document.getElementById('row_'+taskId);
   if (row) {
     const btn = row.querySelector('.check-btn');
@@ -985,13 +1043,11 @@ async function cycleStatus(listingId, taskId) {
     txt.className = 'task-text'+(t.status==='Completed'?' done':'');
   }
   
-  // Update sidebar pill & stats optimistically
   const pills = document.querySelectorAll('#listing-nav .pill');
   const btns  = document.querySelectorAll('#listing-nav .sidebar-btn');
   btns.forEach((b,i) => { if(state.listings[i]&&state.listings[i].id===listingId) { pills[i].textContent=pct(l.tasks)+'%'; } });
   renderProgressStats(listingId);
 
-  // Sync to database
   await syncTasksToDb(listingId);
 }
 
@@ -1013,7 +1069,6 @@ function renderProgressStats(listingId) {
   const fill = document.querySelector('.progress-bar-fill');
   if (fill) fill.style.width = p+'%';
   
-  // phase counts
   document.querySelectorAll('.phase-block').forEach(b => {
     const pid = b.dataset.phase;
     const ptasks = l.tasks.filter(t=>t.phaseId===pid);
@@ -1043,16 +1098,14 @@ async function assignTask(listingId, taskId, member) {
   if (!t) return;
   t.assignee = member;
   
-  // Fast DOM patch
   const row = document.getElementById('row_'+taskId);
   if (row) {
     const badge = row.querySelector('.badge');
-    badge.className = 'badge '+MEMBER_CLASS[member];
+    badge.style = getMemberStyle(member);
     badge.textContent = member+' ▾';
   }
   if (openDropdown) { el(openDropdown).style.display='none'; openDropdown=null; }
 
-  // Sync to database
   await syncTasksToDb(listingId);
 }
 
@@ -1060,10 +1113,10 @@ function openAddTask(listingId, phaseId) {
   editingTask = { listingId, phaseId, isNew: true };
   el('edit-modal-title').textContent = 'Add new task';
   el('edit-text').value = '';
-  el('edit-assignee').value = 'Team';
+  populateAssigneeSelect('Team');
   el('edit-status').value = 'To Do';
   el('edit-notes').value = '';
-  el('btn-delete-task').style.display = 'none'; // Cannot delete an unsaved task
+  el('btn-delete-task').style.display = 'none'; 
   el('edit-modal').style.display = 'flex';
 }
 
@@ -1075,10 +1128,10 @@ function openEditTask(listingId, taskId) {
   editingTask = { listingId, taskId, isNew: false };
   el('edit-modal-title').textContent = 'Edit task';
   el('edit-text').value = t.text;
-  el('edit-assignee').value = t.assignee;
+  populateAssigneeSelect(t.assignee);
   el('edit-status').value   = t.status;
   el('edit-notes').value    = t.notes||'';
-  el('btn-delete-task').style.display = 'block'; // Show delete button for existing task
+  el('btn-delete-task').style.display = 'block'; 
   el('edit-modal').style.display='flex';
 }
 
@@ -1091,7 +1144,7 @@ async function saveEditTask() {
   if (!l) return;
   
   const text = el('edit-text').value.trim();
-  if (!text) return; // Disallow empty task text
+  if (!text) return; 
   
   if (isNew) {
     const newTask = {
@@ -1114,33 +1167,30 @@ async function saveEditTask() {
   }
   
   closeEditTask();
-  
-  // Optimistic UI render
   renderSidebar();
   renderContent();
-
-  // Sync to database
   await syncTasksToDb(listingId);
 }
 
-async function deleteTask() {
+function deleteTask() {
   if (!editingTask || editingTask.isNew) return;
-  if (!confirm('Are you sure you want to delete this task?')) return;
-  
-  const {listingId, taskId} = editingTask;
-  const l = state.listings.find(x=>x.id===listingId);
-  if (!l) return;
-  
-  l.tasks = l.tasks.filter(t => t.id !== taskId);
-  
-  closeEditTask();
-  
-  // Optimistic UI render
-  renderSidebar();
-  renderContent();
-
-  // Sync to database
-  await syncTasksToDb(listingId);
+  showDialog({
+    title: 'Delete Task',
+    message: 'Are you sure you want to delete this task?'
+  }, async (confirmed) => {
+    if (!confirmed) return;
+    
+    const {listingId, taskId} = editingTask;
+    const l = state.listings.find(x=>x.id===listingId);
+    if (!l) return;
+    
+    l.tasks = l.tasks.filter(t => t.id !== taskId);
+    closeEditTask();
+    
+    renderSidebar();
+    renderContent();
+    await syncTasksToDb(listingId);
+  });
 }
 
 function togglePhase(phaseId) {
@@ -1153,6 +1203,30 @@ function togglePhase(phaseId) {
   toggle.textContent = isOpen ? '▼' : '▲';
   toggle.classList.toggle('open', !isOpen);
   openPhases[phaseId] = !isOpen;
+}
+
+function addNewMember() {
+  showDialog({
+    title: 'Add Team Member',
+    message: 'Enter the new team member\'s name:',
+    inputPlaceholder: 'e.g. John'
+  }, async (name) => {
+    if (!name || name.trim() === '') return;
+    const newName = name.trim();
+    if (state.members.includes(newName)) {
+      showDialog({ title: 'Notice', message: 'That member is already on the team.', isAlert: true }, ()=>{});
+      return;
+    }
+    
+    const newMembers = [...state.members, newName];
+    try {
+      await setDoc(doc(db, "settings", "team"), { members: newMembers });
+      showDialog({ title: 'Success', message: `${newName} has been added to the team!`, isAlert: true }, ()=>{});
+    } catch (err) {
+      console.error(err);
+      showDialog({ title: 'Error', message: 'Failed to add member to the database.', isAlert: true }, ()=>{});
+    }
+  });
 }
 </script>
 </body>
